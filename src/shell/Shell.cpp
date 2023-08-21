@@ -250,7 +250,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                     },
                     nullptr));
             } else if (import->fieldName() == "print_i32") {
@@ -258,7 +258,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                         printI32(argv[0].asI32());
                     },
                     nullptr));
@@ -267,7 +267,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                         printI64(argv[0].asI64());
                     },
                     nullptr));
@@ -276,7 +276,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                         printF32(argv[0].asF32());
                     },
                     nullptr));
@@ -285,7 +285,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                         printF64(argv[0].asF64());
                     },
                     nullptr));
@@ -294,7 +294,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                         printI32(argv[0].asI32());
                         printF32(argv[1].asF32());
                     },
@@ -304,7 +304,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                         printF64(argv[0].asF64());
                         printF64(argv[1].asF64());
                     },
@@ -327,7 +327,7 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
                     },
                     nullptr));
             }
@@ -338,8 +338,8 @@ static Trap::TrapResult executeWASM(Store* store, const std::string& filename, c
                 importValues.push_back(ImportedFunction::createImportedFunction(
                     store,
                     ft,
-                    [](ExecutionState& state, const uint32_t argc, Value* argv, Value* result, void* data) {
-                        ASSERT(argc == 1 && argv[0].type() == Value::I32);
+                    [](ExecutionState& state, Value* argv, Value* result, void* data) {
+                        ASSERT(argv[0].type() == Value::I32);
                         exit(argv[0].asI32());
                         ASSERT_NOT_REACHED();
                     },
@@ -627,7 +627,7 @@ static void executeInvokeAction(wabt::InvokeAction* action, Walrus::Function* fn
         RunData* data = reinterpret_cast<RunData*>(d);
         Walrus::ValueVector result;
         result.resize(data->expectedResult.size());
-        data->fn->call(state, data->args.size(), data->args.data(), result.data());
+        data->fn->call(state, data->args.data(), result.data());
         if (data->expectedResult.size()) {
             RELEASE_ASSERT(data->fn->functionType()->result().size() == data->expectedResult.size());
             // compare result
@@ -902,7 +902,7 @@ static void runExports(Store* store, const std::string& filename, const std::vec
 
                 Walrus::ValueVector result;
                 result.resize(fnType->result().size());
-                fn->call(state, 0, nullptr, result.data());
+                fn->call(state, nullptr, result.data());
 
                 for (auto&& r : result) {
                     switch (r.type()) {
