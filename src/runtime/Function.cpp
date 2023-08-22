@@ -131,12 +131,12 @@ void DefinedFunction::intepreterCall(ExecutionState& state, uint8_t* bp, ByteCod
     }
 
     // init local space
-    auto localSize = m_moduleFunction->requiredStackSizeDueToParameterAndLocal() - paramStackSize;
-    memset(functionStackPointer, 0, localSize);
-    functionStackPointer += localSize;
+    // auto localSize = m_moduleFunction->requiredStackSizeDueToParameterAndLocal() - paramStackSize;
+    // memset(functionStackPointer, 0, localSize);
+    // functionStackPointer += localSize;
 
     // init constant space
-    memcpy(functionStackPointer, m_moduleFunction->constantData(), m_moduleFunction->constantDataSize());
+    // memcpy(functionStackPointer, m_moduleFunction->constantData(), m_moduleFunction->constantDataSize());
 
     auto resultOffsets = Interpreter::interpret(newState, functionStackBase);
 

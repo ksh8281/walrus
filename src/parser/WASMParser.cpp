@@ -402,7 +402,6 @@ private:
     Walrus::FunctionType* m_currentFunctionType;
     uint32_t m_initialFunctionStackSize;
     uint32_t m_functionStackSizeSoFar;
-    uint32_t m_lastByteCodePosition;
 
     std::vector<VMStackInfo> m_vmStack;
     std::vector<BlockInfo> m_blockInfo;
@@ -416,8 +415,12 @@ private:
     std::vector<CatchInfo> m_catchInfo;
     struct LocalInfo {
         Walrus::Value::Type m_valueType;
+        size_t m_firstReadPoistion;
+        size_t m_firstWritePoistion;
         LocalInfo(Walrus::Value::Type type)
             : m_valueType(type)
+            , m_firstReadPoistion(std::numeric_limits<size_t>::max())
+            , m_firstWritePoistion(std::numeric_limits<size_t>::max())
         {
         }
     };
@@ -460,6 +463,8 @@ private:
                     }
                 }
                 m_preprocessData.m_localVariableUsage.push_back(LocalVariableUsage(localIndex, *m_readerOffsetPointer, pushCount));
+                m_localInfo[localIndex].m_firstReadPoistion =
+                    std::min(m_localInfo[localIndex].m_firstReadPoistion, *m_readerOffsetPointer);
             }
         }
 
@@ -528,7 +533,6 @@ private:
             m_localInfo.push_back(LocalInfo(m_currentFunctionType->param()[i]));
         }
         m_currentFunction->m_requiredStackSizeDueToParameterAndLocal = m_initialFunctionStackSize = m_functionStackSizeSoFar = m_currentFunctionType->paramStackSize();
-        m_lastByteCodePosition = 0;
         m_currentFunction->m_requiredStackSize = std::max(
             m_currentFunction->m_requiredStackSize, m_functionStackSizeSoFar);
     }
@@ -544,7 +548,6 @@ private:
     template <typename CodeType>
     void pushByteCode(const CodeType& code, WASMOpcode opcode)
     {
-        m_lastByteCodePosition = m_currentFunction->currentByteCodeSize();
         m_currentFunction->pushByteCode(code);
     }
 
@@ -591,7 +594,6 @@ public:
         , m_currentFunctionType(nullptr)
         , m_initialFunctionStackSize(0)
         , m_functionStackSizeSoFar(0)
-        , m_lastByteCodePosition(0)
         , m_elementTableIndex(0)
         , m_segmentMode(Walrus::SegmentMode::None)
     {
@@ -936,22 +938,6 @@ public:
     virtual void OnEndPreprocess() override
     {
         m_preprocessData.m_inPreprocess = false;
-        m_preprocessData.organizeData();
-
-        uint8_t constantBuffer[16];
-        for (size_t i = 0; i < m_preprocessData.m_constantData.size(); i++) {
-            size_t siz = Walrus::valueStackAllocatedSize(m_preprocessData.m_constantData[i].first.type());
-            m_initialFunctionStackSize += siz;
-            memset(constantBuffer, 0, sizeof(constantBuffer));
-            m_preprocessData.m_constantData[i].first.writeToMemory(constantBuffer);
-            for (size_t i = 0; i < siz; i++) {
-                m_currentFunction->m_constantData.pushBack(constantBuffer[i]);
-            }
-#if !defined(NDEBUG)
-            m_currentFunction->m_constantDebugData.pushBack(m_preprocessData.m_constantData[i].first);
-#endif
-        }
-
         m_skipValidationUntil = *m_readerOffsetPointer - 1;
         m_shouldContinueToGenerateByteCode = true;
 
@@ -960,11 +946,52 @@ public:
         m_blockInfo.clear();
         m_catchInfo.clear();
 
+        m_vmStack.clear();
+
+        m_preprocessData.organizeData();
+        // init local if needs
+        for (size_t i = m_currentFunctionType->param().size(); i < m_localInfo.size(); i ++) {
+            if (m_localInfo[i].m_firstReadPoistion < m_localInfo[i].m_firstWritePoistion) {
+                auto r = resolveLocalOffsetAndSize(i);
+                if (r.second == 4) {
+                    pushByteCode(Walrus::Const32(r.first, 0), WASMOpcode::I32ConstOpcode);
+                } else if (r.second == 8) {
+                    pushByteCode(Walrus::Const64(r.first, 0), WASMOpcode::I64ConstOpcode);
+                } else {
+                    ASSERT(r.second == 16);
+                    uint8_t empty[16] = {0, };
+                    pushByteCode(Walrus::Const128(r.first, empty), WASMOpcode::V128ConstOpcode);
+                }
+            }
+        }
+
+        // init constant space
+        uint8_t constantBuffer[16];
+        for (size_t i = 0; i < m_preprocessData.m_constantData.size(); i++) {
+            const auto& constValue = m_preprocessData.m_constantData[i].first;
+            auto constType = m_preprocessData.m_constantData[i].first.type();
+            size_t pos = m_initialFunctionStackSize;
+            size_t siz = Walrus::valueStackAllocatedSize(constType);
+
+            constValue.writeToMemory(constantBuffer);
+            if (siz == 4) {
+                pushByteCode(Walrus::Const32(pos, *reinterpret_cast<uint32_t*>(constantBuffer)), WASMOpcode::I32ConstOpcode);
+            } else if (siz == 8) {
+                pushByteCode(Walrus::Const64(pos, *reinterpret_cast<uint64_t*>(constantBuffer)), WASMOpcode::I64ConstOpcode);
+            } else {
+                ASSERT(siz == 16);
+                pushByteCode(Walrus::Const128(pos, constantBuffer), WASMOpcode::V128ConstOpcode);
+            }
+
+            m_initialFunctionStackSize += siz;
+#if !defined(NDEBUG)
+            m_currentFunction->m_constantDebugData.pushBack(m_preprocessData.m_constantData[i].first);
+#endif
+        }
+
         m_functionStackSizeSoFar = m_initialFunctionStackSize;
         m_currentFunction->m_requiredStackSize = std::max(
             m_currentFunction->m_requiredStackSize, m_functionStackSizeSoFar);
-        m_lastByteCodePosition = 0;
-        m_vmStack.clear();
     }
 
     virtual void OnOpcode(uint32_t opcode) override
@@ -1198,6 +1225,8 @@ public:
                 }
                 iter++;
             }
+            m_localInfo[localIndex].m_firstWritePoistion =
+                std::min(m_localInfo[localIndex].m_firstWritePoistion, *m_readerOffsetPointer);
         }
     }
 
