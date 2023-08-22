@@ -117,26 +117,12 @@ void DefinedFunction::intepreterCall(ExecutionState& state, uint8_t* bp, ByteCod
     ExecutionState newState(state, this);
     checkStackLimit(newState);
 
-    const FunctionType* ft = functionType();
-    const size_t paramStackSize = ft->paramStackSize();
-    const ValueTypeVector& resultTypeInfo = ft->result();
-
     ALLOCA(uint8_t, functionStackBase, m_moduleFunction->requiredStackSize());
-    uint8_t* functionStackPointer = functionStackBase;
 
     // init parameter space
     for (size_t i = 0; i < parameterOffsetCount; i++) {
-        *((size_t*)functionStackPointer) = *((size_t*)(bp + offsets[i]));
-        functionStackPointer += sizeof(size_t);
+        ((size_t*)functionStackBase)[i] = *((size_t*)(bp + offsets[i]));
     }
-
-    // init local space
-    auto localSize = m_moduleFunction->requiredStackSizeDueToParameterAndLocal() - paramStackSize;
-    memset(functionStackPointer, 0, localSize);
-    functionStackPointer += localSize;
-
-    // init constant space
-    memcpy(functionStackPointer, m_moduleFunction->constantData(), m_moduleFunction->constantDataSize());
 
     auto resultOffsets = Interpreter::interpret(newState, functionStackBase);
 
