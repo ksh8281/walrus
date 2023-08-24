@@ -357,7 +357,7 @@ private:
                 if (m_reader.m_blockInfo.size()) {
                     m_reader.m_blockInfo.back().m_seenBranch = true;
                 }
-                for (auto info : m_localVariableInfo) {
+                for (auto& info : m_localVariableInfo) {
                     info.m_writePlacesBetweenBranches.clear();
                 }
             }
@@ -1008,12 +1008,14 @@ public:
 
         m_preprocessData.organizeData();
         // init local if needs
+        /*
         puts("asdfasdf");
         for (size_t i = m_currentFunctionType->param().size(); i < m_localInfo.size(); i++) {
             printf("%zu %d\n", i, (int)m_preprocessData.m_localVariableInfo[i].m_needsExplicitInitOnStartup);
         }
         puts("");
         puts("----");
+        */
         for (size_t i = m_currentFunctionType->param().size(); i < m_localInfo.size(); i++) {
             if (m_preprocessData.m_localVariableInfo[i].m_needsExplicitInitOnStartup) {
                 auto r = resolveLocalOffsetAndSize(i);
@@ -2106,9 +2108,7 @@ public:
 
     virtual void OnReturnExpr() override
     {
-        if (m_blockInfo.size()) {
-            m_blockInfo.back().m_seenBranch = true;
-        }
+        m_preprocessData.seenBranch();
         generateFunctionReturnCode();
     }
 
@@ -2193,6 +2193,7 @@ public:
 
     virtual void OnUnreachableExpr() override
     {
+        m_preprocessData.seenBranch();
         pushByteCode(Walrus::Unreachable(), WASMOpcode::UnreachableOpcode);
         stopToGenerateByteCodeWhileBlockEnd();
     }
